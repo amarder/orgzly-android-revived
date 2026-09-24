@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,8 +15,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxDefaults
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -32,17 +43,86 @@ import com.orgzly.R
 import com.orgzly.android.ui.tasks.model.DueKind
 import com.orgzly.android.ui.tasks.model.Task
 import com.orgzly.android.ui.tasks.model.TaskBucket
+import kotlinx.coroutines.launch
 
+/**
+ * A task row: swipe right to archive, swipe left to delete.
+ *
+ * Neither gesture asks for confirmation. Both are reported to the caller, which offers an
+ * undo instead - cheaper to dismiss than a dialog, and it does not interrupt the gesture.
+ */
 @Composable
 fun TaskRow(
     task: Task,
     bucket: TaskBucket,
     onToggleDone: () -> Unit,
     onOpen: () -> Unit,
+    onSetArchived: (Boolean) -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
+
+    // Deliberately plain remember, not rememberSwipeToDismissBoxState: that saves the
+    // dismissed offset, and a restored non-Settled value makes SwipeToDismissBox fire
+    // onDismiss again on recomposition. For gestures that archive or delete, replaying the
+    // action is data loss, so the swipe position is simply not worth persisting.
+    val threshold = SwipeToDismissBoxDefaults.positionalThreshold
+    val swipeState = remember(task.noteId) {
+        SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, threshold)
+    }
+
+    // SwipeToDismissBox invokes onDismiss on every recomposition while the box is held at a
+    // dismissed offset -- and archiving recomposes this row, because the write comes straight
+    // back through the query flow. Without a latch that is an unbounded loop: one swipe
+    // measured 72 writes, toggling the ARCHIVE tag on and off. Re-arm once the row settles,
+    // so a later, deliberate second swipe still works.
+    var armed by remember(task.noteId) { mutableStateOf(true) }
+
+    LaunchedEffect(swipeState.currentValue) {
+        if (swipeState.currentValue == SwipeToDismissBoxValue.Settled) {
+            armed = true
+        }
+    }
+
+    SwipeToDismissBox(
+        state = swipeState,
+        modifier = modifier,
+        backgroundContent = { SwipeBackground(swipeState.dismissDirection) },
+        onDismiss = { direction ->
+            if (!armed) return@SwipeToDismissBox
+            armed = false
+
+            when (direction) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    onSetArchived(true)
+                    // The row leaves the list as soon as the tag lands, but settle the box
+                    // back anyway: if the write fails the row stays, and it must not stay
+                    // parked open showing only its background.
+                    scope.launch { swipeState.reset() }
+                }
+
+                SwipeToDismissBoxValue.EndToStart -> onDelete()
+
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+        },
+    ) {
+        TaskRowContent(task, bucket, onToggleDone, onOpen)
+    }
+
+}
+
+@Composable
+private fun TaskRowContent(
+    task: Task,
+    bucket: TaskBucket,
+    onToggleDone: () -> Unit,
+    onOpen: () -> Unit,
+) {
     Row(
-        modifier
+        Modifier
+            .background(MaterialTheme.colorScheme.surface)
             .fillMaxWidth()
             .clickable(onClick = onOpen)
             // Completed tasks stay exactly where they were, just receded. Same treatment
@@ -166,5 +246,53 @@ private fun DueChip(millis: Long, kind: DueKind, bucket: TaskBucket) {
             style = MaterialTheme.typography.labelSmall,
             color = foreground,
         )
+    }
+}
+
+/** Colour and icon revealed behind the row, matching whichever way it is being dragged. */
+@Composable
+private fun SwipeBackground(direction: SwipeToDismissBoxValue) {
+    if (direction == SwipeToDismissBoxValue.Settled) {
+        Box(Modifier.fillMaxSize())
+        return
+    }
+
+    val isArchiveGesture = direction == SwipeToDismissBoxValue.StartToEnd
+
+    val background =
+        if (isArchiveGesture) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.errorContainer
+
+    val foreground =
+        if (isArchiveGesture) MaterialTheme.colorScheme.onSecondaryContainer
+        else MaterialTheme.colorScheme.onErrorContainer
+
+    val label = stringResource(
+        if (isArchiveGesture) R.string.tasks_archive else R.string.tasks_delete
+    )
+
+    Row(
+        Modifier
+            .fillMaxSize()
+            .background(background)
+            .padding(horizontal = 20.dp),
+        horizontalArrangement =
+            if (isArchiveGesture) Arrangement.Start else Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(
+                    if (isArchiveGesture) R.drawable.ic_move_to_inbox else R.drawable.ic_delete
+                ),
+                contentDescription = label,
+                tint = foreground,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(label, style = MaterialTheme.typography.labelLarge, color = foreground)
+        }
     }
 }

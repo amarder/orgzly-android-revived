@@ -17,7 +17,6 @@
     <string name="tasks_add_task">Add task</string>
     <string name="tasks_new_task">New task</string>
     <string name="tasks_add">Add</string>
-    <string name="tasks_cancel">Cancel</string>
     <string name="tasks_quick_add_notebook">Notebook</string>
     <string name="tasks_quick_add_choose_notebook">Choose notebook</string>
     <string name="tasks_more">More</string>
@@ -25,10 +24,10 @@
     <string name="tasks_mark_done">Mark as done</string>
     <string name="tasks_mark_not_done">Mark as not done</string>
     <string name="tasks_archive">Archive</string>
-    <string name="tasks_unarchive">Remove from archive</string>
     <string name="tasks_delete">Delete</string>
-    <string name="tasks_delete_confirm_title">Delete task?</string>
-    <string name="tasks_delete_confirm_message">“%1$s” will be removed from the notebook. This cannot be undone.</string>
+    <string name="tasks_undo">Undo</string>
+    <string name="tasks_snackbar_archived">Task archived</string>
+    <string name="tasks_snackbar_deleted">Task deleted</string>
 
     <string name="tasks_detail_title">Task</string>
     <string name="tasks_detail_notes">Notes</string>
@@ -38,6 +37,4 @@
 
     <string name="tasks_open_in_orgzly">Open in Orgzly editor</string>
     <string name="tasks_sync">Sync now</string>
-    <string name="tasks_show_archived">Show archived</string>
-    <string name="tasks_hide_archived">Hide archived</string>
 </resources>

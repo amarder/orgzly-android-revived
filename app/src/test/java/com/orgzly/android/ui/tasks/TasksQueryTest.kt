@@ -112,16 +112,13 @@ class TasksQueryTest {
     }
 
     @Test
-    fun `the archived variant of the query includes them again`() {
+    fun `archived notes are excluded unconditionally, there is no opt-in`() {
         setupBook("book", """
-            * TODO Visible task
-            * TODO Archived task                                            :ARCHIVE:
+            * TODO Plain task
+            * DONE Archived and done                                        :ARCHIVE:
         """.trimIndent())
 
-        assertEquals(
-            listOf("Archived task", "Visible task"),
-            titles(TasksViewModel.QUERY_INCLUDING_ARCHIVED),
-        )
+        assertEquals(listOf("Plain task"), titles(TasksViewModel.QUERY))
     }
 
     @Test

@@ -8,16 +8,11 @@ import com.orgzly.android.ui.tasks.model.TaskSection
 data class TasksState(
     val sections: List<TaskSection>,
     val isLoading: Boolean,
-    val showArchived: Boolean,
 ) {
     val isEmpty: Boolean get() = sections.isEmpty()
 
     companion object {
-        val initial = TasksState(
-            sections = emptyList(),
-            isLoading = true,
-            showArchived = false,
-        )
+        val initial = TasksState(sections = emptyList(), isLoading = true)
     }
 }
 

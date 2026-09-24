@@ -59,8 +59,6 @@ fun TaskDetailSheet(
     var body by remember(task.noteId, detail.isLoadingContent) {
         mutableStateOf(detail.content.orEmpty())
     }
-    var confirmingDelete by remember(task.noteId) { mutableStateOf(false) }
-
     // Title and body are committed on dismiss rather than per keystroke, so that a note is
     // written (and a sync triggered) once per edit instead of once per character.
     fun commitAndDismiss() {
@@ -144,8 +142,8 @@ fun TaskDetailSheet(
 
             SheetAction(
                 iconRes = R.drawable.ic_move_to_inbox,
-                labelRes = if (task.isArchived) R.string.tasks_unarchive else R.string.tasks_archive,
-                onClick = { onSetArchived(!task.isArchived) },
+                labelRes = R.string.tasks_archive,
+                onClick = { commitAndDismiss(); onSetArchived(true) },
             )
 
             SheetAction(
@@ -161,18 +159,11 @@ fun TaskDetailSheet(
                 iconRes = R.drawable.ic_delete,
                 labelRes = R.string.tasks_delete,
                 destructive = true,
-                onClick = { confirmingDelete = true },
+                onClick = { commitAndDismiss(); onDelete() },
             )
         }
     }
 
-    if (confirmingDelete) {
-        DeleteConfirmation(
-            task = task,
-            onConfirm = { confirmingDelete = false; onDelete() },
-            onDismiss = { confirmingDelete = false },
-        )
-    }
 }
 
 @Composable
@@ -203,22 +194,3 @@ private fun SheetAction(
     }
 }
 
-@Composable
-private fun DeleteConfirmation(task: Task, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.tasks_delete_confirm_title)) },
-        text = { Text(stringResource(R.string.tasks_delete_confirm_message, task.title)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(
-                    stringResource(R.string.tasks_delete),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.tasks_cancel)) }
-        },
-    )
-}

@@ -18,8 +18,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,7 +41,9 @@ import com.orgzly.android.ui.compose.modifiers.scaffoldPadding
 import com.orgzly.android.ui.compose.widgets.OrgzlyTopAppBar
 import com.orgzly.android.ui.tasks.TaskDetailState
 import com.orgzly.android.ui.tasks.QuickAddState
+import com.orgzly.android.ui.tasks.TasksEvent
 import com.orgzly.android.ui.tasks.TasksState
+import kotlinx.coroutines.flow.Flow
 import com.orgzly.android.ui.tasks.model.Task
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +52,7 @@ fun TasksScreen(
     state: TasksState,
     detail: TaskDetailState?,
     quickAdd: QuickAddState,
+    events: Flow<TasksEvent>,
     onOpenDrawer: () -> Unit,
     onToggleDone: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
@@ -56,11 +64,44 @@ fun TasksScreen(
     onDelete: (Task) -> Unit,
     onSetDate: (Task, Int, Int, Int) -> Unit,
     onClearDate: (Task) -> Unit,
-    onSetShowArchived: (Boolean) -> Unit,
+    onUndoArchive: (Task) -> Unit,
+    onUndoDelete: (Task) -> Unit,
+    onCommitDelete: (Task) -> Unit,
     onSelectNotebook: (Long) -> Unit,
 ) {
     var quickAddVisible by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val undoLabel = stringResource(R.string.tasks_undo)
+    val archivedMessage = stringResource(R.string.tasks_snackbar_archived)
+    val deletedMessage = stringResource(R.string.tasks_snackbar_deleted)
+
+    // showSnackbar suspends until the bar goes away, and reports whether Undo was tapped.
+    // Dismissed is the commit path: for a delete that is when the row is really removed.
+    LaunchedEffect(events) {
+        events.collect { event ->
+            val message = when (event) {
+                is TasksEvent.Archived -> archivedMessage
+                is TasksEvent.Deleted -> deletedMessage
+            }
+
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Short,
+            )
+
+            when (event) {
+                is TasksEvent.Archived ->
+                    if (result == SnackbarResult.ActionPerformed) onUndoArchive(event.task)
+
+                is TasksEvent.Deleted ->
+                    if (result == SnackbarResult.ActionPerformed) onUndoDelete(event.task)
+                    else onCommitDelete(event.task)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -74,12 +115,7 @@ fun TasksScreen(
                         )
                     }
                 },
-                actions = {
-                    TasksOverflowMenu(
-                        showArchived = state.showArchived,
-                        onSetShowArchived = onSetShowArchived,
-                    )
-                },
+                actions = { TasksOverflowMenu() },
             )
         },
         floatingActionButton = {
@@ -90,6 +126,7 @@ fun TasksScreen(
                 )
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(Modifier.fillMaxSize().scaffoldPadding(padding)) {
             when {
@@ -117,6 +154,8 @@ fun TasksScreen(
                                 bucket = section.bucket,
                                 onToggleDone = { onToggleDone(task) },
                                 onOpen = { onOpenTask(task) },
+                                onSetArchived = { onSetArchived(task, it) },
+                                onDelete = { onDelete(task) },
                             )
                             HorizontalDivider(
                                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -166,10 +205,7 @@ private fun SectionHeader(titleRes: Int, count: Int) {
 }
 
 @Composable
-private fun TasksOverflowMenu(
-    showArchived: Boolean,
-    onSetShowArchived: (Boolean) -> Unit,
-) {
+private fun TasksOverflowMenu() {
     var expanded by remember { mutableStateOf(false) }
 
     IconButton(onClick = { expanded = true }) {
@@ -186,20 +222,6 @@ private fun TasksOverflowMenu(
                 Icon(painterResource(R.drawable.ic_sync), contentDescription = null)
             },
             onClick = { expanded = false; SyncRunner.startSync() },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(
-                    stringResource(
-                        if (showArchived) R.string.tasks_hide_archived
-                        else R.string.tasks_show_archived
-                    )
-                )
-            },
-            leadingIcon = {
-                Icon(painterResource(R.drawable.ic_move_to_inbox), contentDescription = null)
-            },
-            onClick = { expanded = false; onSetShowArchived(!showArchived) },
         )
     }
 }

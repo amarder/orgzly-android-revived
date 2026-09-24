@@ -3,9 +3,11 @@ package com.orgzly.android.ui.tasks
 import android.content.Context
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.viewModelScope
+import com.orgzly.android.App
 import com.orgzly.android.data.DataRepository
 import com.orgzly.android.prefs.AppPreferences
 import com.orgzly.android.ui.CommonViewModel
+import com.orgzly.android.ui.compose.base.EventFlow
 import com.orgzly.android.ui.tasks.model.NotebookSelection
 import com.orgzly.android.ui.tasks.model.Task
 import com.orgzly.android.ui.tasks.model.TaskGrouping
@@ -14,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -27,7 +28,23 @@ class TasksViewModel(
 
     private val actions = TasksActions(dataRepository, context)
 
-    private val showArchived = MutableStateFlow(false)
+    /**
+     * Rows hidden from the list. Grows when a delete starts and shrinks only on undo -
+     * committing does not touch it.
+     *
+     * Visibility and undo bookkeeping are separate on purpose. When they were one map,
+     * clearing the entry on commit changed visibility a moment before the query re-emitted
+     * without the note, and the row flashed back for a frame. Because note ids are
+     * AUTOINCREMENT they are never reused, so leaving a deleted id here forever is safe.
+     */
+    private val hiddenIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    /**
+     * Deletes wait here until their undo window closes, so the row vanishes at once but the
+     * org file is untouched. Recreating a deleted note instead would lose its id and its
+     * place in the outline, which is not an undo.
+     */
+    private val pendingDeletes = MutableStateFlow<Map<Long, Task>>(emptyMap())
     private val detailNoteId = MutableStateFlow<Long?>(null)
     private val detailContent = MutableStateFlow<String?>(null)
     private val detailLoading = MutableStateFlow(false)
@@ -44,22 +61,20 @@ class TasksViewModel(
         }
     }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val notes = showArchived.flatMapLatest { archived ->
-        dataRepository.selectNotesFromQueryFlow(
-            if (archived) QUERY_INCLUDING_ARCHIVED else QUERY
-        )
-    }
+    private val notes = dataRepository.selectNotesFromQueryFlow(QUERY)
 
-    val state = combine(notes, dayTick, showArchived) { noteViews, now, archived ->
+    val state = combine(notes, dayTick, hiddenIds) { noteViews, now, hidden ->
         val doneKeywords = AppPreferences.doneKeywordsSet(context)
 
-        TasksState(
-            sections = TaskGrouping.group(noteViews.map { it.toTask(doneKeywords) }, now),
-            isLoading = false,
-            showArchived = archived,
-        )
+        val tasks = noteViews
+            .map { it.toTask(doneKeywords) }
+            .filterNot { it.noteId in hidden }
+
+        TasksState(sections = TaskGrouping.group(tasks, now), isLoading = false)
     }.state(TasksState.initial)
+
+    private val _events = EventFlow<TasksEvent>()
+    val events = _events.asFlow(viewModelScope)
 
     private val notebooks = dataRepository.getBooksLiveData().asFlow().map { books ->
         books.map { NotebookOption(it.book.id, it.book.name) }
@@ -111,10 +126,6 @@ class TasksViewModel(
         detailLoading.value = false
     }
 
-    fun setShowArchived(show: Boolean) {
-        showArchived.value = show
-    }
-
     fun selectQuickAddNotebook(bookId: Long) {
         selectedBookId.value = bookId
         TasksPrefs.quickAddBookId(context, bookId)
@@ -135,11 +146,55 @@ class TasksViewModel(
     fun setArchived(task: Task, archived: Boolean) = write {
         actions.setArchived(task.noteId, archived)
         closeDetail()
+        if (archived) _events.send(TasksEvent.Archived(task))
     }
 
-    fun delete(task: Task) = write {
-        actions.delete(task.bookId, task.noteId)
+    /** Hides the row and starts the undo window; nothing is written yet. */
+    fun requestDelete(task: Task) {
+        hiddenIds.value = hiddenIds.value + task.noteId
+        pendingDeletes.value = pendingDeletes.value + (task.noteId to task)
         closeDetail()
+        viewModelScope.launch { _events.send(TasksEvent.Deleted(task)) }
+    }
+
+    fun undoDelete(task: Task) {
+        pendingDeletes.value = pendingDeletes.value - task.noteId
+        hiddenIds.value = hiddenIds.value - task.noteId
+    }
+
+    fun commitDelete(task: Task) = write {
+        if (pendingDeletes.value.containsKey(task.noteId)) {
+            pendingDeletes.value = pendingDeletes.value - task.noteId
+            // hiddenIds is intentionally untouched: the row is already hidden and must stay
+            // hidden until the query catches up, otherwise it flashes back.
+            actions.delete(task.bookId, task.noteId)
+        }
+    }
+
+    /**
+     * Flushes anything still waiting, for when the screen goes away before the undo window
+     * closes. Deliberately not on viewModelScope: that is already cancelled by onCleared.
+     */
+    fun commitPendingDeletes() {
+        val pending = pendingDeletes.value
+        if (pending.isEmpty()) return
+
+        pendingDeletes.value = emptyMap()
+
+        App.EXECUTORS.diskIO().execute {
+            pending.values.forEach { task ->
+                try {
+                    actions.delete(task.bookId, task.noteId)
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        commitPendingDeletes()
+        super.onCleared()
     }
 
     fun setScheduledDate(task: Task, year: Int, month0: Int, day: Int) = write {
@@ -152,8 +207,13 @@ class TasksViewModel(
     fun clearScheduled(task: Task) = write { actions.setScheduled(task.noteId, null) }
 
     /** Database writes block, so they never run on the main thread. */
-    private fun write(block: () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
-        catchAndPostError(block)
+    private fun write(block: suspend () -> Unit) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            block()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            errorEvent.postValue(e)
+        }
     }
 
     companion object {
@@ -175,7 +235,5 @@ class TasksViewModel(
          * SQL builder cannot express, so ordering happens in Kotlin alongside grouping.
          */
         const val QUERY = "$STATES .t.${Task.ARCHIVE_TAG}"
-
-        const val QUERY_INCLUDING_ARCHIVED = STATES
     }
 }

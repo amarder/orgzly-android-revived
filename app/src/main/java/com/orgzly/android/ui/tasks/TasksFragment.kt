@@ -55,6 +55,14 @@ class TasksFragment : ComposeFragment(), DrawerItem {
         TasksFirstRun.run(requireContext())
     }
 
+    override fun onStop() {
+        super.onStop()
+
+        // The undo window cannot outlive the screen: anything still pending is written now,
+        // rather than silently surviving as a row the user believes they deleted.
+        viewModel.commitPendingDeletes()
+    }
+
     override fun onResume() {
         super.onResume()
 
@@ -74,6 +82,7 @@ class TasksFragment : ComposeFragment(), DrawerItem {
             state = state,
             detail = detail,
             quickAdd = quickAdd,
+            events = viewModel.events,
             onOpenDrawer = { sharedMainActivityViewModel.openDrawer() },
             onToggleDone = viewModel::toggleDone,
             onOpenTask = { viewModel.openDetail(it.noteId) },
@@ -82,10 +91,12 @@ class TasksFragment : ComposeFragment(), DrawerItem {
             onRename = viewModel::rename,
             onContentChange = viewModel::setContent,
             onSetArchived = viewModel::setArchived,
-            onDelete = viewModel::delete,
+            onDelete = viewModel::requestDelete,
             onSetDate = viewModel::setScheduledDate,
             onClearDate = viewModel::clearScheduled,
-            onSetShowArchived = viewModel::setShowArchived,
+            onUndoArchive = { viewModel.setArchived(it, false) },
+            onUndoDelete = viewModel::undoDelete,
+            onCommitDelete = viewModel::commitDelete,
             onSelectNotebook = viewModel::selectQuickAddNotebook,
         )
     }
