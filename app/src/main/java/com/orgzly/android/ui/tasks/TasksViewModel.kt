@@ -10,16 +10,13 @@ import com.orgzly.android.ui.CommonViewModel
 import com.orgzly.android.ui.compose.base.EventFlow
 import com.orgzly.android.ui.tasks.model.NotebookSelection
 import com.orgzly.android.ui.tasks.model.Task
-import com.orgzly.android.ui.tasks.model.TaskGrouping
+import com.orgzly.android.ui.tasks.model.TaskOrdering
 import com.orgzly.android.ui.tasks.model.toTask
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.joda.time.DateTime
 
 class TasksViewModel(
     private val dataRepository: DataRepository,
@@ -49,28 +46,17 @@ class TasksViewModel(
     private val detailContent = MutableStateFlow<String?>(null)
     private val detailLoading = MutableStateFlow(false)
 
-    /**
-     * Which bucket a task falls in depends on the wall clock, so re-emit at local midnight to
-     * move yesterday's "Today" into "Overdue" without the user having to reopen the screen.
-     */
-    private val dayTick = flow {
-        while (true) {
-            emit(System.currentTimeMillis())
-            val nextMidnight = DateTime.now().withTimeAtStartOfDay().plusDays(1).millis
-            delay((nextMidnight - System.currentTimeMillis()).coerceAtLeast(1_000L))
-        }
-    }
 
     private val notes = dataRepository.selectNotesFromQueryFlow(QUERY)
 
-    val state = combine(notes, dayTick, hiddenIds) { noteViews, now, hidden ->
+    val state = combine(notes, hiddenIds) { noteViews, hidden ->
         val doneKeywords = AppPreferences.doneKeywordsSet(context)
 
         val tasks = noteViews
             .map { it.toTask(doneKeywords) }
             .filterNot { it.noteId in hidden }
 
-        TasksState(sections = TaskGrouping.group(tasks, now), isLoading = false)
+        TasksState(tasks = TaskOrdering.sort(tasks), isLoading = false)
     }.state(TasksState.initial)
 
     private val _events = EventFlow<TasksEvent>()
@@ -100,10 +86,7 @@ class TasksViewModel(
     ) { noteId, tasksState, content, loading ->
         if (noteId == null) return@combine null
 
-        val task = tasksState.sections
-            .asSequence()
-            .flatMap { it.tasks.asSequence() }
-            .firstOrNull { it.noteId == noteId }
+        val task = tasksState.tasks.firstOrNull { it.noteId == noteId }
             ?: return@combine null
 
         TaskDetailState(task = task, content = content, isLoadingContent = loading)

@@ -1,9 +1,7 @@
 package com.orgzly.android.ui.tasks.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -143,24 +141,15 @@ fun TasksScreen(
                     )
 
                 else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    state.sections.forEach { section ->
-                        stickyHeader(key = "header-${section.bucket.name}") {
-                            SectionHeader(section.bucket.titleRes, section.tasks.size)
-                        }
-
-                        items(section.tasks, key = { it.noteId }) { task ->
-                            TaskRow(
-                                task = task,
-                                bucket = section.bucket,
-                                onToggleDone = { onToggleDone(task) },
-                                onOpen = { onOpenTask(task) },
-                                onSetArchived = { onSetArchived(task, it) },
-                                onDelete = { onDelete(task) },
-                            )
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                            )
-                        }
+                    items(state.tasks, key = { it.noteId }) { task ->
+                        TaskRow(
+                            task = task,
+                            onToggleDone = { onToggleDone(task) },
+                            onOpen = { onOpenTask(task) },
+                            onSetArchived = { onSetArchived(task, it) },
+                            onDelete = { onDelete(task) },
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     }
                 }
             }
@@ -191,18 +180,6 @@ fun TasksScreen(
     }
 }
 
-@Composable
-private fun SectionHeader(titleRes: Int, count: Int) {
-    Text(
-        text = "${stringResource(titleRes)}  ·  $count",
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
-    )
-}
 
 @Composable
 private fun TasksOverflowMenu() {

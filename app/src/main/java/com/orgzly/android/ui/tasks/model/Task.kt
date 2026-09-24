@@ -2,11 +2,6 @@ package com.orgzly.android.ui.tasks.model
 
 import androidx.compose.runtime.Immutable
 
-enum class DueKind { SCHEDULED, DEADLINE }
-
-@Immutable
-data class TaskDue(val millis: Long, val kind: DueKind)
-
 /**
  * Flattened, UI-facing view of a single to-do note. Deliberately holds no [com.orgzly.android
  * .db.entity.NoteView] so that grouping and sorting stay free of Android and database types.
@@ -30,22 +25,9 @@ data class Task(
     val isArchived: Boolean
         get() = tags.any { it.equals(ARCHIVE_TAG, ignoreCase = true) }
 
-    /**
-     * The date this task is answerable to: whichever of SCHEDULED/DEADLINE lands first.
-     * A deadline wins a tie, because it is the harder commitment of the two.
-     */
-    val due: TaskDue?
-        get() {
-            val s = scheduledMillis
-            val d = deadlineMillis
-            return when {
-                s != null && d != null ->
-                    if (d <= s) TaskDue(d, DueKind.DEADLINE) else TaskDue(s, DueKind.SCHEDULED)
-                d != null -> TaskDue(d, DueKind.DEADLINE)
-                s != null -> TaskDue(s, DueKind.SCHEDULED)
-                else -> null
-            }
-        }
+    /** The date this task is answerable to: whichever of SCHEDULED/DEADLINE lands first. */
+    val dueMillis: Long?
+        get() = listOfNotNull(scheduledMillis, deadlineMillis).minOrNull()
 
     companion object {
         /** Orgzly's existing convention; see NoteItemViewBinder.ARCHIVE_TAG. */

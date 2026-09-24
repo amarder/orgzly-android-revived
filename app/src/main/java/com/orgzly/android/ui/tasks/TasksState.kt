@@ -2,17 +2,16 @@ package com.orgzly.android.ui.tasks
 
 import androidx.compose.runtime.Immutable
 import com.orgzly.android.ui.tasks.model.Task
-import com.orgzly.android.ui.tasks.model.TaskSection
 
 @Immutable
 data class TasksState(
-    val sections: List<TaskSection>,
+    val tasks: List<Task>,
     val isLoading: Boolean,
 ) {
-    val isEmpty: Boolean get() = sections.isEmpty()
+    val isEmpty: Boolean get() = tasks.isEmpty()
 
     companion object {
-        val initial = TasksState(sections = emptyList(), isLoading = true)
+        val initial = TasksState(tasks = emptyList(), isLoading = true)
     }
 }
 

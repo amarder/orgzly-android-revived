@@ -4,12 +4,6 @@
     <string name="tasks_title">Tasks</string>
     <string name="tasks_empty">Nothing to do.</string>
 
-    <string name="tasks_bucket_overdue">Overdue</string>
-    <string name="tasks_bucket_today">Today</string>
-    <string name="tasks_bucket_upcoming">Upcoming</string>
-    <string name="tasks_bucket_later">Later</string>
-    <string name="tasks_bucket_no_date">No date</string>
-
     <string name="tasks_date_today">Today</string>
     <string name="tasks_date_tomorrow">Tomorrow</string>
     <string name="tasks_date_yesterday">Yesterday</string>

@@ -5,6 +5,7 @@ import com.orgzly.android.data.DataRepository
 import com.orgzly.android.prefs.AppPreferences
 import com.orgzly.android.ui.NotePlace
 import com.orgzly.android.ui.note.NoteBuilder
+import com.orgzly.android.ui.note.NotePayload
 import com.orgzly.android.ui.tasks.model.Task
 import com.orgzly.android.usecase.NoteCreate
 import com.orgzly.android.usecase.NoteDelete
@@ -14,6 +15,8 @@ import com.orgzly.android.usecase.NoteUpdateScheduledTime
 import com.orgzly.android.usecase.NoteUpdateStateToggle
 import com.orgzly.android.usecase.UseCaseRunner
 import com.orgzly.org.datetime.OrgDateTime
+import com.orgzly.org.datetime.OrgRange
+import java.util.Calendar
 
 /**
  * Every write the tasks UI performs. All of them go through UseCaseRunner rather than touching
@@ -75,10 +78,12 @@ class TasksActions(
     }
 
     /**
-     * Creates a note, forcing a to-do state.
+     * Creates a note, forcing a to-do state and a SCHEDULED date of today.
      *
-     * NoteBuilder takes the state from the "new note state" preference, which may be blank or
-     * "NOTE" - either of which would produce a task that the it.todo query cannot see.
+     * Both are overridden rather than left to NoteBuilder. It takes the state from the "new
+     * note state" preference, which may be blank or "NOTE" - either would produce a task the
+     * it.todo query cannot see - and it schedules only when "new note scheduled" happens to
+     * be on, which would drop new tasks into "No date" where they are easy to lose.
      *
      * A null [bookId] falls back to Orgzly's own capture target, which creates the default
      * notebook when none exist yet.
@@ -89,10 +94,26 @@ class TasksActions(
 
         val targetBookId = bookId ?: dataRepository.getTargetBook(context).book.id
 
-        val payload = NoteBuilder.newPayload(context, trimmed, null)
-            .copy(state = AppPreferences.getFirstTodoState(context))
+        UseCaseRunner.run(NoteCreate(newTaskPayload(trimmed), NotePlace(targetBookId)))
+    }
 
-        UseCaseRunner.run(NoteCreate(payload, NotePlace(targetBookId)))
+    /** Split out from [create] so it can be tested without going through Dagger. */
+    internal fun newTaskPayload(title: String): NotePayload {
+        val today = Calendar.getInstance()
+
+        val scheduled = OrgRange(
+            TaskDateEdit.rebase(
+                existingRangeString = null,
+                year = today.get(Calendar.YEAR),
+                month0 = today.get(Calendar.MONTH),
+                day = today.get(Calendar.DAY_OF_MONTH),
+            )
+        ).toString()
+
+        return NoteBuilder.newPayload(context, title, null).copy(
+            state = AppPreferences.getFirstTodoState(context),
+            scheduled = scheduled,
+        )
     }
 
     fun contentOf(noteId: Long): String? = dataRepository.getNotePayload(noteId)?.content

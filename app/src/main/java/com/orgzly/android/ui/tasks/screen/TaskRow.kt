@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
@@ -31,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -40,9 +38,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.orgzly.R
-import com.orgzly.android.ui.tasks.model.DueKind
 import com.orgzly.android.ui.tasks.model.Task
-import com.orgzly.android.ui.tasks.model.TaskBucket
 import kotlinx.coroutines.launch
 
 /**
@@ -54,7 +50,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun TaskRow(
     task: Task,
-    bucket: TaskBucket,
     onToggleDone: () -> Unit,
     onOpen: () -> Unit,
     onSetArchived: (Boolean) -> Unit,
@@ -108,7 +103,7 @@ fun TaskRow(
             }
         },
     ) {
-        TaskRowContent(task, bucket, onToggleDone, onOpen)
+        TaskRowContent(task, onToggleDone, onOpen)
     }
 
 }
@@ -116,7 +111,6 @@ fun TaskRow(
 @Composable
 private fun TaskRowContent(
     task: Task,
-    bucket: TaskBucket,
     onToggleDone: () -> Unit,
     onOpen: () -> Unit,
 ) {
@@ -138,37 +132,17 @@ private fun TaskRowContent(
             modifier = Modifier.padding(top = 2.dp),
         )
 
-        Column(
-            Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            // Only the headline: the state keyword is what the circle already communicates.
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                task.due?.let { due ->
-                    DueChip(millis = due.millis, kind = due.kind, bucket = bucket)
-                }
-
-                Text(
-                    text = task.bookName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        // Just the headline. The circle already says whether it is done, the section header
+        // already says when it is due, and the notebook is in the detail sheet.
+        Text(
+            text = task.title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -212,42 +186,6 @@ private fun TaskCircle(
     }
 }
 
-@Composable
-private fun DueChip(millis: Long, kind: DueKind, bucket: TaskBucket) {
-    val context = LocalContext.current
-
-    val isUrgent = bucket == TaskBucket.OVERDUE || bucket == TaskBucket.TODAY
-
-    val background =
-        if (isUrgent) MaterialTheme.colorScheme.errorContainer
-        else MaterialTheme.colorScheme.surfaceVariant
-
-    val foreground =
-        if (isUrgent) MaterialTheme.colorScheme.onErrorContainer
-        else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Row(
-        Modifier
-            .background(background, RoundedCornerShape(6.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(
-            painter = painterResource(
-                if (kind == DueKind.DEADLINE) R.drawable.ic_alarm else R.drawable.ic_today
-            ),
-            contentDescription = null,
-            tint = foreground,
-            modifier = Modifier.size(12.dp),
-        )
-        Text(
-            text = formatDueDate(context, millis),
-            style = MaterialTheme.typography.labelSmall,
-            color = foreground,
-        )
-    }
-}
 
 /** Colour and icon revealed behind the row, matching whichever way it is being dragged. */
 @Composable

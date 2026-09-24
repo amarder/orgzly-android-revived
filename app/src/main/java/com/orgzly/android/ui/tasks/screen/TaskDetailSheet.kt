@@ -97,7 +97,7 @@ fun TaskDetailSheet(
             ) {
                 AssistChip(
                     onClick = {
-                        val start = task.due?.millis?.let { DateTime(it) } ?: DateTime.now()
+                        val start = task.dueMillis?.let { DateTime(it) } ?: DateTime.now()
                         DatePickerDialog(
                             context,
                             { _, year, month0, day -> onSetDate(year, month0, day) },
@@ -108,7 +108,7 @@ fun TaskDetailSheet(
                     },
                     label = {
                         Text(
-                            task.due?.let { formatDueDate(context, it.millis) }
+                            task.dueMillis?.let { formatDueDate(context, it) }
                                 ?: stringResource(R.string.tasks_detail_set_date)
                         )
                     },
@@ -121,7 +121,7 @@ fun TaskDetailSheet(
                     },
                 )
 
-                if (task.due != null) {
+                if (task.dueMillis != null) {
                     TextButton(onClick = onClearDate) {
                         Text(stringResource(R.string.tasks_detail_clear_date))
                     }
