@@ -51,6 +51,7 @@ import com.orgzly.android.ui.notifications.Notifications;
 import com.orgzly.android.ui.savedsearch.SavedSearchFragment;
 import com.orgzly.android.ui.savedsearches.SavedSearchesFragment;
 import com.orgzly.android.ui.settings.SettingsActivity;
+import com.orgzly.android.ui.tasks.TasksDisplay; // [custom-ui]
 import com.orgzly.android.ui.sync.SyncFragment;
 import com.orgzly.android.ui.util.KeyboardUtils;
 import com.orgzly.android.usecase.BookExport;
@@ -198,7 +199,13 @@ public class MainActivity extends CommonActivity
 
             if (BuildConfig.LOG_DEBUG) LogUtils.d(TAG, bookId, noteId, queryString);
 
-            DisplayManager.displayBooks(getSupportFragmentManager(), false);
+            // [custom-ui] Launcher opens the tasks screen; deep links still take precedence.
+            if (getIntent().getBooleanExtra(TasksDisplay.EXTRA_OPEN_TASKS, false)
+                    && bookId == 0 && queryString == null) {
+                TasksDisplay.INSTANCE.display(getSupportFragmentManager(), false);
+            } else {
+                DisplayManager.displayBooks(getSupportFragmentManager(), false);
+            }
 
             /* Display requested book and note. */
             if (bookId > 0) {
@@ -645,6 +652,7 @@ public class MainActivity extends CommonActivity
         bm.registerReceiver(receiver, new IntentFilter(AppIntent.ACTION_OPEN_BOOKS));
         bm.registerReceiver(receiver, new IntentFilter(AppIntent.ACTION_OPEN_BOOK));
         bm.registerReceiver(receiver, new IntentFilter(AppIntent.ACTION_OPEN_SETTINGS));
+        bm.registerReceiver(receiver, new IntentFilter(TasksDisplay.ACTION_OPEN_TASKS)); // [custom-ui]
     }
 
     @Override
@@ -1042,6 +1050,12 @@ public class MainActivity extends CommonActivity
                                     .setForceHideRefineButton(forceHideRefineButton)
                                     .setSearchName(searchName)
                     );
+                    break;
+                }
+
+                // [custom-ui]
+                case TasksDisplay.ACTION_OPEN_TASKS: {
+                    TasksDisplay.INSTANCE.display(getSupportFragmentManager(), true);
                     break;
                 }
 

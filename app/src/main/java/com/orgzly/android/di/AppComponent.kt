@@ -108,4 +108,7 @@ interface AppComponent {
     fun inject(arg: NotificationBroadcastReceiver)
     fun inject(arg: SharingShortcutsManager)
     fun inject(arg: ExternalAccessActionHandler)
+
+    // [custom-ui]
+    fun inject(arg: com.orgzly.android.ui.tasks.TasksFragment)
 }

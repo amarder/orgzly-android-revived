@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.orgzly.BuildConfig
 import com.orgzly.android.ui.main.MainActivity
+import com.orgzly.android.ui.tasks.TasksDisplay
 import com.orgzly.android.util.LogUtils
 
 class LauncherActivity : AppCompatActivity() {
@@ -14,8 +15,10 @@ class LauncherActivity : AppCompatActivity() {
         if (BuildConfig.LOG_DEBUG)
             LogUtils.d(TAG, intent, savedInstanceState)
 
-        startActivity(Intent(this, MainActivity::class.java))
-        // startActivity(Intent(this, IntroActivity::class.java))
+        // [custom-ui] Open MainActivity on the tasks screen rather than the notebook list.
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            putExtra(TasksDisplay.EXTRA_OPEN_TASKS, true)
+        })
 
         finish()
     }
