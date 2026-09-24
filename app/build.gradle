@@ -61,6 +61,12 @@ android {
         }
 
         debug {
+            // [custom-ui] Install side-by-side with a release Orgzly Revived instead of
+            // colliding with it (same applicationId => signature-mismatch, and the usual
+            // "fix" is uninstalling, which destroys the real app's notebooks and sync config).
+            applicationIdSuffix ".debug"
+            resValue "string", "application_id", "com.orgzlyrevived.debug"
+
             buildConfigField "boolean", "LOG_DEBUG", "true"
 
             buildConfigField "String", "DROPBOX_REFRESH_TOKEN", gradle.ext.appProperties.getProperty("dropbox.refresh_token", '""')
