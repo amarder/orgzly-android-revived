@@ -1,0 +1,98 @@
+package com.orgzly.android.ui.tasks
+
+import android.content.Context
+import android.os.Bundle
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.orgzly.android.App
+import com.orgzly.android.data.DataRepository
+import com.orgzly.android.ui.compose.base.ComposeFragment
+import com.orgzly.android.ui.drawer.DrawerItem
+import com.orgzly.android.ui.main.SharedMainActivityViewModel
+import com.orgzly.android.ui.tasks.screen.TasksScreen
+import javax.inject.Inject
+
+/**
+ * Task-oriented view of every to-do note across all notebooks.
+ *
+ * A fragment inside MainActivity rather than its own activity, so that it is a peer of
+ * Notebooks and the saved searches: same drawer, same back stack, no dead end.
+ */
+class TasksFragment : ComposeFragment(), DrawerItem {
+
+    @Inject
+    lateinit var dataRepository: DataRepository
+
+    private lateinit var sharedMainActivityViewModel: SharedMainActivityViewModel
+
+    private lateinit var viewModel: TasksViewModel
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        App.appComponent.inject(this)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Built here rather than with compose's viewModel(): that lives in
+        // lifecycle-viewmodel-compose, which this project does not depend on, and adding it
+        // would mean another edit to build.gradle for no behavioural gain.
+        viewModel = ViewModelProvider(
+            this,
+            TasksViewModelFactory.getInstance(
+                dataRepository,
+                requireContext().applicationContext,
+            )
+        )[TasksViewModel::class.java]
+
+        sharedMainActivityViewModel = ViewModelProvider(requireActivity())[
+            SharedMainActivityViewModel::class.java
+        ]
+
+        TasksFirstRun.run(requireContext())
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        // Tells the drawer which item to check.
+        sharedMainActivityViewModel.setCurrentFragment(FRAGMENT_TAG)
+    }
+
+    override fun getCurrentDrawerItemId(): String = drawerItemId
+
+    @Composable
+    override fun Content() {
+        val state by viewModel.state.collectAsStateWithLifecycle()
+        val detail by viewModel.detail.collectAsStateWithLifecycle()
+        val quickAdd by viewModel.quickAdd.collectAsStateWithLifecycle()
+
+        TasksScreen(
+            state = state,
+            detail = detail,
+            quickAdd = quickAdd,
+            onOpenDrawer = { sharedMainActivityViewModel.openDrawer() },
+            onToggleDone = viewModel::toggleDone,
+            onOpenTask = { viewModel.openDetail(it.noteId) },
+            onCloseDetail = viewModel::closeDetail,
+            onCreate = viewModel::create,
+            onRename = viewModel::rename,
+            onContentChange = viewModel::setContent,
+            onSetArchived = viewModel::setArchived,
+            onDelete = viewModel::delete,
+            onSetDate = viewModel::setScheduledDate,
+            onClearDate = viewModel::clearScheduled,
+            onSetShowArchived = viewModel::setShowArchived,
+            onSelectNotebook = viewModel::selectQuickAddNotebook,
+        )
+    }
+
+    companion object {
+        val drawerItemId: String = TasksFragment::class.java.name
+
+        val FRAGMENT_TAG: String = TasksFragment::class.java.name
+    }
+}

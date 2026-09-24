@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- [custom-ui] Strings for the custom task-oriented UI (com.orgzly.android.ui.tasks). -->
+<resources>
+    <string name="tasks_title">Tasks</string>
+    <string name="tasks_empty">Nothing to do.</string>
+
+    <string name="tasks_bucket_overdue">Overdue</string>
+    <string name="tasks_bucket_today">Today</string>
+    <string name="tasks_bucket_upcoming">Upcoming</string>
+    <string name="tasks_bucket_later">Later</string>
+    <string name="tasks_bucket_no_date">No date</string>
+
+    <string name="tasks_date_today">Today</string>
+    <string name="tasks_date_tomorrow">Tomorrow</string>
+    <string name="tasks_date_yesterday">Yesterday</string>
+
+    <string name="tasks_add_task">Add task</string>
+    <string name="tasks_new_task">New task</string>
+    <string name="tasks_add">Add</string>
+    <string name="tasks_cancel">Cancel</string>
+    <string name="tasks_quick_add_notebook">Notebook</string>
+    <string name="tasks_quick_add_choose_notebook">Choose notebook</string>
+    <string name="tasks_more">More</string>
+
+    <string name="tasks_mark_done">Mark as done</string>
+    <string name="tasks_mark_not_done">Mark as not done</string>
+    <string name="tasks_archive">Archive</string>
+    <string name="tasks_unarchive">Remove from archive</string>
+    <string name="tasks_delete">Delete</string>
+    <string name="tasks_delete_confirm_title">Delete task?</string>
+    <string name="tasks_delete_confirm_message">“%1$s” will be removed from the notebook. This cannot be undone.</string>
+
+    <string name="tasks_detail_title">Task</string>
+    <string name="tasks_detail_notes">Notes</string>
+    <string name="tasks_detail_set_date">Set date</string>
+    <string name="tasks_detail_clear_date">Clear</string>
+    <string name="tasks_detail_notebook">In %1$s</string>
+
+    <string name="tasks_open_in_orgzly">Open in Orgzly editor</string>
+    <string name="tasks_sync">Sync now</string>
+    <string name="tasks_show_archived">Show archived</string>
+    <string name="tasks_hide_archived">Hide archived</string>
+</resources>
