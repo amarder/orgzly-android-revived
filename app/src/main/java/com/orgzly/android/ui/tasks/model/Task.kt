@@ -21,6 +21,11 @@ data class Task(
     val scheduledRangeString: String?,
     val deadlineMillis: Long?,
     val deadlineRangeString: String?,
+    /**
+     * Hand-picked position within its day, from the note's own ORGZLY_TASK_ORDER property.
+     * Null for anything never dragged, which is most tasks.
+     */
+    val order: Long? = null,
 ) {
     val isArchived: Boolean
         get() = tags.any { it.equals(ARCHIVE_TAG, ignoreCase = true) }

@@ -8,9 +8,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.orgzly.android.App
 import com.orgzly.android.data.DataRepository
+import com.orgzly.android.db.OrgzlyDatabase
 import com.orgzly.android.ui.compose.base.ComposeFragment
 import com.orgzly.android.ui.drawer.DrawerItem
 import com.orgzly.android.ui.main.SharedMainActivityViewModel
+import com.orgzly.android.ui.tasks.screen.NewTaskScreen
 import com.orgzly.android.ui.tasks.screen.TasksScreen
 import javax.inject.Inject
 
@@ -24,6 +26,11 @@ class TasksFragment : ComposeFragment(), DrawerItem {
 
     @Inject
     lateinit var dataRepository: DataRepository
+
+    /** Only for the one bulk read of task order values; every other write goes through
+     * DataRepository and the use cases. */
+    @Inject
+    lateinit var database: OrgzlyDatabase
 
     private lateinit var sharedMainActivityViewModel: SharedMainActivityViewModel
 
@@ -44,6 +51,7 @@ class TasksFragment : ComposeFragment(), DrawerItem {
             this,
             TasksViewModelFactory.getInstance(
                 dataRepository,
+                database,
                 requireContext().applicationContext,
             )
         )[TasksViewModel::class.java]
@@ -77,17 +85,32 @@ class TasksFragment : ComposeFragment(), DrawerItem {
         val state by viewModel.state.collectAsStateWithLifecycle()
         val detail by viewModel.detail.collectAsStateWithLifecycle()
         val quickAdd by viewModel.quickAdd.collectAsStateWithLifecycle()
+        val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+        val isComposingNewTask by viewModel.isComposingNewTask.collectAsStateWithLifecycle()
+
+        if (isComposingNewTask) {
+            NewTaskScreen(
+                quickAdd = quickAdd,
+                onCancel = viewModel::cancelNewTask,
+                onCreate = viewModel::createTask,
+                onSelectNotebook = viewModel::selectQuickAddNotebook,
+            )
+            return
+        }
 
         TasksScreen(
             state = state,
             detail = detail,
             quickAdd = quickAdd,
+            syncStatus = syncStatus,
             events = viewModel.events,
             onOpenDrawer = { sharedMainActivityViewModel.openDrawer() },
             onToggleDone = viewModel::toggleDone,
             onOpenTask = { viewModel.openDetail(it.noteId) },
             onCloseDetail = viewModel::closeDetail,
-            onCreate = viewModel::create,
+            onNewTask = viewModel::startNewTask,
+            onPasteTasks = { ClipboardTasks.clipboardText(requireContext()) },
+            onCreateMany = viewModel::createMany,
             onRename = viewModel::rename,
             onContentChange = viewModel::setContent,
             onSetArchived = viewModel::setArchived,
@@ -97,6 +120,7 @@ class TasksFragment : ComposeFragment(), DrawerItem {
             onUndoArchive = { viewModel.setArchived(it, false) },
             onUndoDelete = viewModel::undoDelete,
             onCommitDelete = viewModel::commitDelete,
+            onReorder = viewModel::reorder,
             onSelectNotebook = viewModel::selectQuickAddNotebook,
         )
     }

@@ -8,10 +8,12 @@ import com.orgzly.android.data.DbRepoBookRepository
 import com.orgzly.android.db.OrgzlyDatabase
 import com.orgzly.android.prefs.AppPreferences
 import com.orgzly.android.repos.RepoFactory
+import com.orgzly.android.ui.tasks.model.TaskDate
 import com.orgzly.org.datetime.OrgRange
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,5 +90,39 @@ class TasksActionsTest {
     @Test
     fun `the title is carried through`() {
         assertEquals("Buy milk", actions.newTaskPayload("Buy milk").title)
+    }
+
+    // --- the new-task screen's four fields ----------------------------------------------
+
+    @Test
+    fun `a chosen date is what gets scheduled, not today`() {
+        val payload = actions.newTaskPayload("Buy milk", TaskDate(2027, 0, 9))
+
+        assertEquals("2027-01-09", OrgRange.parse(payload.scheduled).startTime.calendar.let {
+            "%04d-%02d-%02d".format(
+                it.get(Calendar.YEAR), it.get(Calendar.MONTH) + 1, it.get(Calendar.DAY_OF_MONTH)
+            )
+        })
+    }
+
+    /** Clearing the date has to mean no SCHEDULED at all, not a fallback to today. */
+    @Test
+    fun `no date means no scheduled timestamp`() {
+        assertNull(actions.newTaskPayload("Buy milk", date = null).scheduled)
+    }
+
+    @Test
+    fun `a task with no date is still a to-do`() {
+        assertEquals("TODO", actions.newTaskPayload("Buy milk", date = null).state)
+    }
+
+    /**
+     * Pasting a list that turns out to be empty must not reach the database at all - not even
+     * to resolve a target notebook, which would create the default one as a side effect.
+     */
+    @Test
+    fun `creating from blank lines creates nothing`() {
+        assertEquals(0, actions.createMany(emptyList(), null))
+        assertEquals(0, actions.createMany(listOf("", "   ", "\n"), null))
     }
 }

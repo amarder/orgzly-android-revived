@@ -23,6 +23,7 @@ class TaskOrderingTest {
         priority: String? = null,
         scheduled: Long? = null,
         deadline: Long? = null,
+        order: Long? = null,
     ) = Task(
         noteId = id,
         bookId = 1,
@@ -37,6 +38,7 @@ class TaskOrderingTest {
         scheduledRangeString = null,
         deadlineMillis = deadline,
         deadlineRangeString = null,
+        order = order,
     )
 
     private fun order(vararg tasks: Task) = TaskOrdering.sort(tasks.toList()).map { it.title }
@@ -135,5 +137,145 @@ class TaskOrderingTest {
     @Test
     fun `an empty list sorts to an empty list`() {
         assertEquals(emptyList<Task>(), TaskOrdering.sort(emptyList()))
+    }
+
+    // --- hand-picked order ---------------------------------------------------------
+
+    @Test
+    fun `a dragged order overrides priority and title within a day`() {
+        val day = at(2026, 9, 24)
+
+        assertEquals(
+            listOf("zebra", "apple"),
+            order(
+                task(id = 1, title = "apple", priority = "A", scheduled = day, order = 2048),
+                task(id = 2, title = "zebra", priority = "C", scheduled = day, order = 1024),
+            ),
+        )
+    }
+
+    /**
+     * The first sort key is the day, not the timestamp, precisely so this works: a task with
+     * a clock time can be dragged above an untimed one due the same day.
+     */
+    @Test
+    fun `a dragged order overrides time of day`() {
+        assertEquals(
+            listOf("evening", "morning"),
+            order(
+                task(id = 1, title = "morning", scheduled = at(2026, 9, 24, h = 9), order = 2048),
+                task(id = 2, title = "evening", scheduled = at(2026, 9, 24, h = 20), order = 1024),
+            ),
+        )
+    }
+
+    @Test
+    fun `an order cannot lift a task onto another day`() {
+        assertEquals(
+            listOf("today", "tomorrow"),
+            order(
+                task(id = 1, title = "tomorrow", scheduled = at(2026, 9, 25), order = 1),
+                task(id = 2, title = "today", scheduled = at(2026, 9, 24), order = 9999),
+            ),
+        )
+    }
+
+    @Test
+    fun `undated tasks stay last however they are ordered`() {
+        assertEquals(
+            listOf("dated", "undated"),
+            order(
+                task(id = 1, title = "undated", order = 1),
+                task(id = 2, title = "dated", scheduled = at(2099, 1, 1), order = 9999),
+            ),
+        )
+    }
+
+    /** A task never dragged has no order, and sorts below everything that has one. */
+    @Test
+    fun `unordered tasks sort after ordered ones on the same day`() {
+        val day = at(2026, 9, 24)
+
+        assertEquals(
+            listOf("zebra", "apple"),
+            order(
+                task(id = 1, title = "apple", scheduled = day),
+                task(id = 2, title = "zebra", scheduled = day, order = 1024),
+            ),
+        )
+    }
+
+    @Test
+    fun `undated tasks can be ordered among themselves`() {
+        assertEquals(
+            listOf("zebra", "apple"),
+            order(
+                task(id = 1, title = "apple", order = 2048),
+                task(id = 2, title = "zebra", order = 1024),
+            ),
+        )
+    }
+
+    // --- the day a drag is confined to -----------------------------------------------
+
+    /**
+     * Found on a device: a task dragged hard downwards escaped its own day and landed among
+     * tomorrow's. The clamp is only as good as this range.
+     */
+    @Test
+    fun `a day's range covers exactly the rows sharing its date`() {
+        val tasks = listOf(
+            task(id = 1, scheduled = at(2026, 9, 24)),
+            task(id = 2, scheduled = at(2026, 9, 24, h = 18)),
+            task(id = 3, scheduled = at(2026, 9, 25)),
+            task(id = 4, scheduled = at(2026, 9, 25)),
+            task(id = 5),
+        )
+
+        assertEquals(0..1, TaskOrdering.dayRange(tasks, 0))
+        assertEquals(0..1, TaskOrdering.dayRange(tasks, 1))
+        assertEquals(2..3, TaskOrdering.dayRange(tasks, 2))
+        assertEquals(2..3, TaskOrdering.dayRange(tasks, 3))
+    }
+
+    /** Undated tasks are a day of their own, and can be ordered among themselves. */
+    @Test
+    fun `undated tasks form their own range`() {
+        val tasks = listOf(
+            task(id = 1, scheduled = at(2026, 9, 24)),
+            task(id = 2),
+            task(id = 3),
+        )
+
+        assertEquals(1..2, TaskOrdering.dayRange(tasks, 1))
+    }
+
+    @Test
+    fun `a lone task on its date is a range of one`() {
+        val tasks = listOf(
+            task(id = 1, scheduled = at(2026, 9, 24)),
+            task(id = 2, scheduled = at(2026, 9, 25)),
+            task(id = 3, scheduled = at(2026, 9, 26)),
+        )
+
+        assertEquals(1..1, TaskOrdering.dayRange(tasks, 1))
+    }
+
+    @Test
+    fun `a single-task list is its own range`() {
+        assertEquals(0..0, TaskOrdering.dayRange(listOf(task(id = 1)), 0))
+    }
+
+    @Test
+    fun `negative order values sort before positive ones`() {
+        val day = at(2026, 9, 24)
+
+        assertEquals(
+            listOf("first", "second"),
+            order(
+                task(id = 1, title = "second", scheduled = day, order = 0),
+                task(id = 2, title = "first", scheduled = day, order = -1024),
+            ),
+        )
     }
 }

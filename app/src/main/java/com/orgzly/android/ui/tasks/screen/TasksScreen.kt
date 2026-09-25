@@ -3,15 +3,11 @@ package com.orgzly.android.ui.tasks.screen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +16,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,15 +27,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import com.orgzly.R
 import com.orgzly.android.sync.SyncRunner
 import com.orgzly.android.ui.compose.modifiers.scaffoldPadding
 import com.orgzly.android.ui.compose.widgets.OrgzlyTopAppBar
-import com.orgzly.android.ui.tasks.TaskDetailState
 import com.orgzly.android.ui.tasks.QuickAddState
+import com.orgzly.android.ui.tasks.SyncStatus
+import com.orgzly.android.ui.tasks.TaskDetailState
 import com.orgzly.android.ui.tasks.TasksEvent
 import com.orgzly.android.ui.tasks.TasksState
 import kotlinx.coroutines.flow.Flow
@@ -50,12 +51,15 @@ fun TasksScreen(
     state: TasksState,
     detail: TaskDetailState?,
     quickAdd: QuickAddState,
+    syncStatus: SyncStatus,
     events: Flow<TasksEvent>,
     onOpenDrawer: () -> Unit,
     onToggleDone: (Task) -> Unit,
     onOpenTask: (Task) -> Unit,
     onCloseDetail: () -> Unit,
-    onCreate: (String) -> Unit,
+    onNewTask: () -> Unit,
+    onPasteTasks: () -> String,
+    onCreateMany: (List<String>) -> Unit,
     onRename: (Task, String) -> Unit,
     onContentChange: (Task, String?) -> Unit,
     onSetArchived: (Task, Boolean) -> Unit,
@@ -65,15 +69,22 @@ fun TasksScreen(
     onUndoArchive: (Task) -> Unit,
     onUndoDelete: (Task) -> Unit,
     onCommitDelete: (Task) -> Unit,
+    onReorder: (Long, List<Task>) -> Unit,
     onSelectNotebook: (Long) -> Unit,
 ) {
-    var quickAddVisible by remember { mutableStateOf(false) }
+    // Null until the + is held: the clipboard is read once, at that moment, so the sheet
+    // cannot be showing text that was replaced while it was open.
+    var pasteText by remember { mutableStateOf<String?>(null) }
+
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val undoLabel = stringResource(R.string.tasks_undo)
     val archivedMessage = stringResource(R.string.tasks_snackbar_archived)
     val deletedMessage = stringResource(R.string.tasks_snackbar_deleted)
+    // Resolved from resources rather than pluralStringResource: the count is only known
+    // inside the collector, which is not a composable scope.
+    val resources = LocalContext.current.resources
 
     // showSnackbar suspends until the bar goes away, and reports whether Undo was tapped.
     // Dismissed is the commit path: for a delete that is when the row is really removed.
@@ -82,11 +93,17 @@ fun TasksScreen(
             val message = when (event) {
                 is TasksEvent.Archived -> archivedMessage
                 is TasksEvent.Deleted -> deletedMessage
+                is TasksEvent.Added ->
+                    resources.getQuantityString(
+                        R.plurals.tasks_snackbar_added, event.count, event.count
+                    )
             }
 
+            // Only the reversible events offer a way back; an add has nothing hidden to
+            // restore, so it just reports itself.
             val result = snackbarHostState.showSnackbar(
                 message = message,
-                actionLabel = undoLabel,
+                actionLabel = if (event is TasksEvent.Added) null else undoLabel,
                 duration = SnackbarDuration.Short,
             )
 
@@ -97,6 +114,8 @@ fun TasksScreen(
                 is TasksEvent.Deleted ->
                     if (result == SnackbarResult.ActionPerformed) onUndoDelete(event.task)
                     else onCommitDelete(event.task)
+
+                is TasksEvent.Added -> Unit
             }
         }
     }
@@ -113,16 +132,22 @@ fun TasksScreen(
                         )
                     }
                 },
-                actions = { TasksOverflowMenu() },
+                actions = {
+                    SyncStatusButton(syncStatus) {
+                        if (syncStatus == SyncStatus.SYNCING) {
+                            SyncRunner.stopSync()
+                        } else {
+                            SyncRunner.startSync()
+                        }
+                    }
+                },
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { quickAddVisible = true }) {
-                Icon(
-                    painterResource(R.drawable.ic_add),
-                    contentDescription = stringResource(R.string.tasks_add_task),
-                )
-            }
+            AddTaskButton(
+                onClick = onNewTask,
+                onLongClick = { pasteText = onPasteTasks() },
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -140,27 +165,25 @@ fun TasksScreen(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),
                     )
 
-                else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    items(state.tasks, key = { it.noteId }) { task ->
-                        TaskRow(
-                            task = task,
-                            onToggleDone = { onToggleDone(task) },
-                            onOpen = { onOpenTask(task) },
-                            onSetArchived = { onSetArchived(task, it) },
-                            onDelete = { onDelete(task) },
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-                    }
-                }
+                else -> DraggableTaskList(
+                    tasks = state.tasks,
+                    listState = listState,
+                    onToggleDone = onToggleDone,
+                    onOpenTask = onOpenTask,
+                    onSetArchived = onSetArchived,
+                    onDelete = onDelete,
+                    onReorder = onReorder,
+                )
             }
         }
     }
 
-    if (quickAddVisible) {
-        QuickAddSheet(
+    pasteText?.let { text ->
+        PasteTasksSheet(
+            initialText = text,
             quickAdd = quickAdd,
-            onDismiss = { quickAddVisible = false },
-            onAdd = onCreate,
+            onDismiss = { pasteText = null },
+            onAdd = onCreateMany,
             onSelectNotebook = onSelectNotebook,
         )
     }
@@ -180,25 +203,35 @@ fun TasksScreen(
     }
 }
 
-
+/**
+ * The + button: tap for one task, hold for a list pasted from the clipboard.
+ *
+ * Built from a Surface rather than a FloatingActionButton because that only takes onClick,
+ * and layering combinedClickable over its own clickable leaves two of them competing for the
+ * same press.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TasksOverflowMenu() {
-    var expanded by remember { mutableStateOf(false) }
-
-    IconButton(onClick = { expanded = true }) {
-        Icon(
-            painterResource(R.drawable.ic_more_horiz),
-            contentDescription = stringResource(R.string.tasks_more),
-        )
-    }
-
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.tasks_sync)) },
-            leadingIcon = {
-                Icon(painterResource(R.drawable.ic_sync), contentDescription = null)
-            },
-            onClick = { expanded = false; SyncRunner.startSync() },
-        )
+private fun AddTaskButton(onClick: () -> Unit, onLongClick: () -> Unit) {
+    Surface(
+        shape = FloatingActionButtonDefaults.shape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shadowElevation = 6.dp,
+        modifier = Modifier
+            .size(56.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onClickLabel = stringResource(R.string.tasks_add_task),
+                onLongClickLabel = stringResource(R.string.tasks_paste_title),
+            ),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                painterResource(R.drawable.ic_add),
+                contentDescription = stringResource(R.string.tasks_add_task),
+            )
+        }
     }
 }

@@ -10,10 +10,14 @@
 
     <string name="tasks_add_task">Add task</string>
     <string name="tasks_new_task">New task</string>
+    <string name="tasks_new_task_cancel">Discard task</string>
     <string name="tasks_add">Add</string>
     <string name="tasks_quick_add_notebook">Notebook</string>
     <string name="tasks_quick_add_choose_notebook">Choose notebook</string>
-    <string name="tasks_more">More</string>
+
+    <string name="tasks_paste_title">Add tasks from clipboard</string>
+    <string name="tasks_paste_hint">One task per line</string>
+    <string name="tasks_paste_add">Add %1$d</string>
 
     <string name="tasks_mark_done">Mark as done</string>
     <string name="tasks_mark_not_done">Mark as not done</string>
@@ -22,6 +26,10 @@
     <string name="tasks_undo">Undo</string>
     <string name="tasks_snackbar_archived">Task archived</string>
     <string name="tasks_snackbar_deleted">Task deleted</string>
+    <plurals name="tasks_snackbar_added">
+        <item quantity="one">%1$d task added</item>
+        <item quantity="other">%1$d tasks added</item>
+    </plurals>
 
     <string name="tasks_detail_title">Task</string>
     <string name="tasks_detail_notes">Notes</string>
@@ -30,5 +38,8 @@
     <string name="tasks_detail_notebook">In %1$s</string>
 
     <string name="tasks_open_in_orgzly">Open in Orgzly editor</string>
-    <string name="tasks_sync">Sync now</string>
+    <string name="tasks_sync_synced">In sync. Tap to sync now</string>
+    <string name="tasks_sync_pending">Changes not synced. Tap to sync</string>
+    <string name="tasks_sync_syncing">Syncing. Tap to stop</string>
+    <string name="tasks_sync_failed">Sync failed. Tap to retry</string>
 </resources>

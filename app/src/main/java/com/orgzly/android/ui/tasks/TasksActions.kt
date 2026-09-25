@@ -7,6 +7,8 @@ import com.orgzly.android.ui.NotePlace
 import com.orgzly.android.ui.note.NoteBuilder
 import com.orgzly.android.ui.note.NotePayload
 import com.orgzly.android.ui.tasks.model.Task
+import com.orgzly.android.ui.tasks.model.TaskDate
+import com.orgzly.android.ui.tasks.model.TaskOrderValues
 import com.orgzly.android.usecase.NoteCreate
 import com.orgzly.android.usecase.NoteDelete
 import com.orgzly.android.usecase.NoteUpdate
@@ -16,7 +18,6 @@ import com.orgzly.android.usecase.NoteUpdateStateToggle
 import com.orgzly.android.usecase.UseCaseRunner
 import com.orgzly.org.datetime.OrgDateTime
 import com.orgzly.org.datetime.OrgRange
-import java.util.Calendar
 
 /**
  * Every write the tasks UI performs. All of them go through UseCaseRunner rather than touching
@@ -78,37 +79,92 @@ class TasksActions(
     }
 
     /**
-     * Creates a note, forcing a to-do state and a SCHEDULED date of today.
+     * Records where a task sits within its day, as a property on the note itself.
+     *
+     * Going through NoteUpdate rather than writing the property row directly is what gets it
+     * into the org file: the use case marks the notebook modified, and the exporter writes
+     * every property back out into the PROPERTIES drawer.
+     */
+    fun setOrder(noteId: Long, value: Long) {
+        val payload = dataRepository.getNotePayload(noteId) ?: return
+
+        val properties = payload.properties.also {
+            it.set(TaskOrderValues.PROPERTY, value.toString())
+        }
+
+        UseCaseRunner.run(NoteUpdate(noteId, payload.copy(properties = properties)))
+    }
+
+    /**
+     * Creates a single task from the new-task screen.
+     *
+     * Everything the screen does not offer is left to [newTaskPayload]'s defaults, which is
+     * the point: a task has a title, a notebook, a date and some notes, and nothing else is
+     * worth a field on the way in.
+     */
+    fun create(title: String, content: String?, bookId: Long?, date: TaskDate?): Boolean {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return false
+
+        val targetBookId = bookId ?: dataRepository.getTargetBook(context).book.id
+
+        val payload = newTaskPayload(trimmed, date)
+            .copy(content = content?.takeIf { it.isNotBlank() })
+
+        UseCaseRunner.run(NoteCreate(payload, NotePlace(targetBookId)))
+
+        return true
+    }
+
+    /**
+     * Creates one task per title, returning how many were made.
+     *
+     * A loop rather than a batch insert: each NoteCreate is its own transaction with a
+     * full-book lft shift, which is O(n) book updates, but n here is the length of a list
+     * somebody pasted. AutoSync collapses the repeated triggers. If this ever does get slow,
+     * DataRepository.pasteNotes is the real bulk primitive.
+     *
+     * A null [bookId] falls back to Orgzly's own capture target, which creates the default
+     * notebook when none exist yet. It is resolved once, before anything is written: falling
+     * back per title could create that notebook and then scatter the rest of the batch across
+     * whatever it resolved to next.
+     */
+    fun createMany(titles: List<String>, bookId: Long?): Int {
+        val wanted = titles.map { it.trim() }.filter { it.isNotEmpty() }
+        if (wanted.isEmpty()) return 0
+
+        val targetBookId = bookId ?: dataRepository.getTargetBook(context).book.id
+
+        wanted.forEach { title ->
+            UseCaseRunner.run(NoteCreate(newTaskPayload(title), NotePlace(targetBookId)))
+        }
+
+        return wanted.size
+    }
+
+    /**
+     * What a new task starts as: a to-do state and a SCHEDULED date of today.
      *
      * Both are overridden rather than left to NoteBuilder. It takes the state from the "new
      * note state" preference, which may be blank or "NOTE" - either would produce a task the
      * it.todo query cannot see - and it schedules only when "new note scheduled" happens to
      * be on, which would drop new tasks into "No date" where they are easy to lose.
      *
-     * A null [bookId] falls back to Orgzly's own capture target, which creates the default
-     * notebook when none exist yet.
+     * Kept separate from [createMany] so it can be handed to Orgzly's own note editor, and so
+     * it can be tested without going through Dagger.
      */
-    fun create(title: String, bookId: Long?) {
-        val trimmed = title.trim()
-        if (trimmed.isEmpty()) return
-
-        val targetBookId = bookId ?: dataRepository.getTargetBook(context).book.id
-
-        UseCaseRunner.run(NoteCreate(newTaskPayload(trimmed), NotePlace(targetBookId)))
-    }
-
-    /** Split out from [create] so it can be tested without going through Dagger. */
-    internal fun newTaskPayload(title: String): NotePayload {
-        val today = Calendar.getInstance()
-
-        val scheduled = OrgRange(
-            TaskDateEdit.rebase(
-                existingRangeString = null,
-                year = today.get(Calendar.YEAR),
-                month0 = today.get(Calendar.MONTH),
-                day = today.get(Calendar.DAY_OF_MONTH),
-            )
-        ).toString()
+    @JvmOverloads
+    fun newTaskPayload(title: String, date: TaskDate? = TaskDate.today()): NotePayload {
+        val scheduled = date?.let {
+            OrgRange(
+                TaskDateEdit.rebase(
+                    existingRangeString = null,
+                    year = it.year,
+                    month0 = it.month0,
+                    day = it.day,
+                )
+            ).toString()
+        }
 
         return NoteBuilder.newPayload(context, title, null).copy(
             state = AppPreferences.getFirstTodoState(context),
