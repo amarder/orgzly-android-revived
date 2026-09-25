@@ -4,8 +4,7 @@ import android.app.DatePickerDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,6 +15,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -48,7 +48,7 @@ import com.orgzly.android.ui.tasks.model.TaskDate
  * belong in the way of writing down a thing to do. This keeps the speed, being a plain screen
  * in the same window so the keyboard rises with it, and drops the rest.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTaskScreen(
     quickAdd: QuickAddState,
@@ -105,24 +105,25 @@ fun NewTaskScreen(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text(stringResource(R.string.tasks_detail_title)) },
+                textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
             )
 
-            // Flows onto a second line rather than squeezing: a notebook can be called
-            // anything, and a long name used to crush "Clear" into two letters a line.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                NotebookPicker(
-                    notebooks = quickAdd.notebooks,
-                    selected = quickAdd.selected,
-                    onSelect = onSelectNotebook,
-                )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text(stringResource(R.string.tasks_detail_notes)) },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 AssistChip(
                     onClick = {
                         val start = date ?: TaskDate.today()
@@ -156,13 +157,15 @@ fun NewTaskScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text(stringResource(R.string.tasks_detail_notes)) },
-                minLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (quickAdd.notebooks.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NotebookPicker(
+                        notebooks = quickAdd.notebooks,
+                        selected = quickAdd.selected,
+                        onSelect = onSelectNotebook,
+                    )
+                }
+            }
         }
     }
 

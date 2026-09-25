@@ -123,20 +123,21 @@ private fun TaskRowContent(
             // Orgzly's own list gives done and archived notes.
             .alpha(if (task.isDone) 0.5f else 1f)
             .padding(start = 12.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         TaskCircle(
             isDone = task.isDone,
             onClick = onToggleDone,
-            modifier = Modifier.padding(top = 2.dp),
         )
 
         // Just the headline. The circle already says whether it is done, the section header
         // already says when it is due, and the notebook is in the detail sheet.
         Text(
             text = task.title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = rememberNoteListTextSize(R.attr.item_head_title_text_size),
+            ),
             color = MaterialTheme.colorScheme.onSurface,
             textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
             maxLines = 3,

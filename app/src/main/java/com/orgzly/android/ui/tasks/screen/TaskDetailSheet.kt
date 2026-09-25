@@ -190,7 +190,7 @@ private fun SheetAction(
             tint = tint,
             modifier = Modifier.size(22.dp),
         )
-        Text(stringResource(labelRes), style = MaterialTheme.typography.bodyLarge, color = tint)
+        Text(stringResource(labelRes), style = MaterialTheme.typography.bodyMedium, color = tint)
     }
 }
 

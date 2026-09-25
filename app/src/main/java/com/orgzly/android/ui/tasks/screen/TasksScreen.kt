@@ -159,7 +159,7 @@ fun TasksScreen(
                 state.isEmpty ->
                     Text(
                         text = stringResource(R.string.tasks_empty),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.align(Alignment.Center).padding(32.dp),

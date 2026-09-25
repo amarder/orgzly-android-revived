@@ -3,11 +3,15 @@ package com.orgzly.android.ui.tasks.screen
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -22,9 +26,16 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.orgzly.R
 import com.orgzly.android.ui.tasks.model.Task
+import com.orgzly.android.ui.tasks.model.TaskListEntries
+import com.orgzly.android.ui.tasks.model.TaskListEntry
 import com.orgzly.android.ui.tasks.model.TaskOrdering
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.roundToInt
@@ -70,53 +81,105 @@ fun DraggableTaskList(
 
     DragAutoScroll(dragState, listState)
 
+    // Built once per recomposition rather than fed straight from itemsIndexed: once header
+    // rows are interleaved, a LazyColumn item's own index counts headers too and no longer
+    // matches a task's position in rows, which is what the drag math below is keyed on.
+    val entries = remember(rows) { TaskListEntries.build(rows) }
+
     LazyColumn(modifier.fillMaxSize(), state = listState) {
-        itemsIndexed(rows, key = { _, task -> task.noteId }) { index, task ->
-            val isDragging = drag?.draggedNoteId == task.noteId
+        items(
+            entries,
+            key = { entry ->
+                when (entry) {
+                    is TaskListEntry.Header -> "header:${entry.dayBucket}"
+                    is TaskListEntry.Row -> entry.task.noteId
+                }
+            },
+        ) { entry ->
+            when (entry) {
+                is TaskListEntry.Header -> TaskDateHeader(entry.dayBucket)
 
-            // Read outside graphicsLayer so the lift follows every layout pass.
-            val dragTranslation = if (isDragging) drag?.translation(listState) ?: 0f else 0f
+                is TaskListEntry.Row -> {
+                    val task = entry.task
+                    val index = entry.taskIndex
+                    val isDragging = drag?.draggedNoteId == task.noteId
 
-            // Rows the dragged task cannot reach are dimmed. The list has no date headers, so
-            // without a cue a drag that refuses to go further just looks broken.
-            val outOfReach = drag?.let { index !in it.range } ?: false
+                    // Read outside graphicsLayer so the lift follows every layout pass.
+                    val dragTranslation =
+                        if (isDragging) drag?.translation(listState) ?: 0f else 0f
 
-            TaskRow(
-                task = task,
-                onToggleDone = { onToggleDone(task) },
-                onOpen = { onOpenTask(task) },
-                onSetArchived = { onSetArchived(task, it) },
-                onDelete = { onDelete(task) },
-                modifier = Modifier
-                    .zIndex(if (isDragging) 1f else 0f)
-                    .graphicsLayer {
-                        translationY = if (isDragging) dragTranslation else 0f
-                        shadowElevation = if (isDragging) 8f else 0f
-                    }
-                    .alpha(if (outOfReach) 0.35f else 1f)
-                    .pointerInput(task.noteId) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                DragState.start(currentTasks, task.noteId, listState)?.let {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    drag = it
-                                }
+                    // Rows the dragged task cannot reach are dimmed - without a cue a drag
+                    // that refuses to go further just looks broken.
+                    val outOfReach = drag?.let { index !in it.range } ?: false
+
+                    TaskRow(
+                        task = task,
+                        onToggleDone = { onToggleDone(task) },
+                        onOpen = { onOpenTask(task) },
+                        onSetArchived = { onSetArchived(task, it) },
+                        onDelete = { onDelete(task) },
+                        modifier = Modifier
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY = if (isDragging) dragTranslation else 0f
+                                shadowElevation = if (isDragging) 8f else 0f
+                            }
+                            .alpha(if (outOfReach) 0.35f else 1f)
+                            .pointerInput(task.noteId) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        DragState.start(currentTasks, task.noteId, listState)
+                                            ?.let {
+                                                haptics.performHapticFeedback(
+                                                    HapticFeedbackType.LongPress
+                                                )
+                                                drag = it
+                                            }
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        drag = drag?.dragBy(amount.y)
+                                    },
+                                    onDragEnd = {
+                                        drag?.let {
+                                            currentOnReorder(it.draggedNoteId, it.movedGroup())
+                                        }
+                                        drag = null
+                                    },
+                                    onDragCancel = { drag = null },
+                                )
                             },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                drag = drag?.dragBy(amount.y)
-                            },
-                            onDragEnd = {
-                                drag?.let { currentOnReorder(it.draggedNoteId, it.movedGroup()) }
-                                drag = null
-                            },
-                            onDragCancel = { drag = null },
-                        )
-                    },
-            )
+                    )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                }
+            }
         }
+    }
+}
+
+/** A day divider, echoing the built-in Agenda view's elevated date bar. */
+@Composable
+private fun TaskDateHeader(dayBucket: Long?) {
+    val context = LocalContext.current
+    val label = dayBucket?.let { formatDueDate(context, it) }
+        ?: stringResource(R.string.tasks_date_none)
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = rememberNoteListTextSize(R.attr.item_head_post_title_text_size),
+            ),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
 
@@ -234,13 +297,18 @@ private data class DragState(
 
             val range = TaskOrdering.dayRange(tasks, index)
 
+            // Matched by key, not by LazyColumn item index: date-header rows share the same
+            // item stream, so an item's index no longer equals its position in tasks.
+            val firstNoteId = tasks[range.first].noteId
+            val lastNoteId = tasks[range.last].noteId
+
             // A day taller than the screen has no visible first or last row. Falling back to
             // the dragged row itself would pin the drag to its own slot; the viewport is the
             // honest bound, and auto-scroll brings the rest of the day into reach.
             val layout = listState.layoutInfo
-            val top = items.firstOrNull { it.index == range.first }?.offset
+            val top = items.firstOrNull { it.key == firstNoteId }?.offset
                 ?: layout.viewportStartOffset
-            val bottom = items.firstOrNull { it.index == range.last }?.let { it.offset + it.size }
+            val bottom = items.firstOrNull { it.key == lastNoteId }?.let { it.offset + it.size }
                 ?: layout.viewportEndOffset
 
             return DragState(

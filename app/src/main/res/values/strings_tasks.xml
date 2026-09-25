@@ -7,6 +7,7 @@
     <string name="tasks_date_today">Today</string>
     <string name="tasks_date_tomorrow">Tomorrow</string>
     <string name="tasks_date_yesterday">Yesterday</string>
+    <string name="tasks_date_none">No date</string>
 
     <string name="tasks_add_task">Add task</string>
     <string name="tasks_new_task">New task</string>
